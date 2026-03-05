@@ -1,0 +1,173 @@
+###############################################################################
+#  ARR Media Stack — Gluetun VPN (PIA/OpenVPN) + qBittorrent + Prowlarr
+#                     + Radarr + Jellyfin + Jellyseerr
+#
+#  All torrent & indexer traffic is forced through the Gluetun VPN tunnel.
+#  Web UIs are exposed on the host via Gluetun so they stay reachable
+#  on your local network.
+#
+#  Usage:
+#    1. Copy .env.example → .env  and fill in your PIA credentials
+#    2. docker compose up -d
+#    3. Verify VPN:  docker exec gluetun curl -s https://ipinfo.io
+#
+#  CasaOS compatible — import this file directly.
+###############################################################################
+
+version: "3.9"
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  GLUETUN — VPN gateway container (PIA + OpenVPN)
+  #  All containers using network_mode: "service:gluetun" will inherit
+  #  this VPN tunnel. Kill-switch is enabled by default.
+  # ─────────────────────────────────────────────────────────────────────────
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN                       # Required for VPN tunnel creation
+    devices:
+      - /dev/net/tun:/dev/net/tun       # TUN device for OpenVPN
+    environment:
+      # ── VPN Provider Settings ──
+      - VPN_SERVICE_PROVIDER=private internet access
+      - VPN_TYPE=openvpn
+      - OPENVPN_USER=${PIA_USER}
+      - OPENVPN_PASSWORD=${PIA_PASS}
+      - SERVER_REGIONS=${PIA_REGION:-Netherlands}
+
+      # ── Kill Switch & DNS Leak Prevention ──
+      - FIREWALL_VPN_INPUT_PORTS=${QBIT_PORT:-6881}   # Port for torrent traffic
+      - DOT=on                          # DNS-over-TLS (prevents DNS leaks)
+      - DOT_PROVIDERS=cloudflare        # Use Cloudflare DoT
+      - BLOCK_MALICIOUS=on              # Block malicious domains
+      - FIREWALL=on                     # Built-in kill-switch (default)
+
+      # ── Health Check ──
+      - HEALTH_VPN_DURATION_INITIAL=30s
+      - HEALTH_TARGET_ADDRESS=1.1.1.1:443
+
+    ports:
+      # Gluetun owns the network for qBittorrent & Prowlarr,
+      # so their web UI ports must be exposed here:
+      - "${QBIT_WEBUI_PORT:-8080}:8080"       # qBittorrent Web UI
+      - "${PROWLARR_PORT:-9696}:9696"          # Prowlarr Web UI
+      - "${QBIT_PORT:-6881}:6881"              # qBittorrent torrent port
+      - "${QBIT_PORT:-6881}:6881/udp"          # qBittorrent torrent port (UDP)
+    volumes:
+      - gluetun_data:/gluetun
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "https://ipinfo.io"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  qBITTORRENT — Torrent client (routed through Gluetun)
+  #  Web UI: http://<host-ip>:8080
+  # ─────────────────────────────────────────────────────────────────────────
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: "service:gluetun"     # ← All traffic goes through VPN
+    depends_on:
+      gluetun:
+        condition: service_healthy      # Wait for VPN to be up
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+      - WEBUI_PORT=8080
+    volumes:
+      - qbittorrent_config:/config
+      - ${DOWNLOADS_PATH:-./downloads}:/downloads
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  PROWLARR — Indexer manager (routed through Gluetun)
+  #  Web UI: http://<host-ip>:9696
+  # ─────────────────────────────────────────────────────────────────────────
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    network_mode: "service:gluetun"     # ← All traffic goes through VPN
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - prowlarr_config:/config
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  RADARR — Movie management
+  #  Web UI: http://<host-ip>:7878
+  #  NOT behind VPN — only talks to Prowlarr & qBittorrent internally
+  # ─────────────────────────────────────────────────────────────────────────
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    ports:
+      - "${RADARR_PORT:-7878}:7878"
+    volumes:
+      - radarr_config:/config
+      - ${DOWNLOADS_PATH:-./downloads}:/downloads
+      - ${MEDIA_PATH:-./media}/movies:/movies
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  JELLYFIN — Media server
+  #  Web UI: http://<host-ip>:8096
+  # ─────────────────────────────────────────────────────────────────────────
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    ports:
+      - "${JELLYFIN_PORT:-8096}:8096"
+    volumes:
+      - jellyfin_config:/config
+      - ${MEDIA_PATH:-./media}/movies:/data/movies
+      - ${MEDIA_PATH:-./media}/tv:/data/tv
+      - ${MEDIA_PATH:-./media}/music:/data/music
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  JELLYSEERR — Media request manager
+  #  Web UI: http://<host-ip>:5055
+  # ─────────────────────────────────────────────────────────────────────────
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+    ports:
+      - "${JELLYSEERR_PORT:-5055}:5055"
+    volumes:
+      - jellyseerr_config:/app/config
+    restart: unless-stopped
+
+# ─────────────────────────────────────────────────────────────────────────
+#  NAMED VOLUMES
+# ─────────────────────────────────────────────────────────────────────────
+volumes:
+  gluetun_data:
+  qbittorrent_config:
+  prowlarr_config:
+  radarr_config:
+  jellyfin_config:
+  jellyseerr_config:
