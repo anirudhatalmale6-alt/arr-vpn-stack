@@ -238,7 +238,7 @@ services:
     ports:
       - "${JELLYSEERR_PORT:-5055}:5055"
     volumes:
-      - jellyseerr_config:/app/config
+      - ./jellyseerr-config:/app/config
     restart: unless-stopped
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -253,4 +253,3 @@ volumes:
   lidarr_config:
   bazarr_config:
   jellyfin_config:
-  jellyseerr_config:
