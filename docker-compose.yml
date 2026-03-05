@@ -188,25 +188,6 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
-  #  READARR — Book & audiobook management
-  #  Web UI: http://<host-ip>:8787
-  # ─────────────────────────────────────────────────────────────────────────
-  readarr:
-    image: lscr.io/linuxserver/readarr:latest
-    container_name: readarr
-    environment:
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-      - TZ=${TZ:-Etc/UTC}
-    ports:
-      - "${READARR_PORT:-8787}:8787"
-    volumes:
-      - readarr_config:/config
-      - ${DOWNLOADS_PATH:-./downloads}:/downloads
-      - ${MEDIA_PATH:-./media}/books:/books
-    restart: unless-stopped
-
-  # ─────────────────────────────────────────────────────────────────────────
   #  BAZARR — Subtitle management (auto-downloads subs for Radarr & Sonarr)
   #  Web UI: http://<host-ip>:6767
   # ─────────────────────────────────────────────────────────────────────────
@@ -271,7 +252,6 @@ volumes:
   radarr_config:
   sonarr_config:
   lidarr_config:
-  readarr_config:
   bazarr_config:
   jellyfin_config:
   jellyseerr_config:
