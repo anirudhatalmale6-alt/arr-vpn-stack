@@ -90,7 +90,7 @@ services:
       - WEBUI_PORT=8080
     volumes:
       - qbittorrent_config:/config
-      - ${DOWNLOADS_PATH:-./downloads}:/downloads
+      - "/media/devmon/Seagate Backup Plus/Media/Downloads:/downloads"
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -145,8 +145,8 @@ services:
       - "${RADARR_PORT:-7878}:7878"
     volumes:
       - radarr_config:/config
-      - ${DOWNLOADS_PATH:-./downloads}:/downloads
-      - ${MEDIA_PATH:-./media}/movies:/movies
+      - "/media/devmon/Seagate Backup Plus/Media/Downloads:/downloads"
+      - "/media/devmon/Seagate Backup Plus/Media/movies:/movies"
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -164,8 +164,8 @@ services:
       - "${SONARR_PORT:-8989}:8989"
     volumes:
       - sonarr_config:/config
-      - ${DOWNLOADS_PATH:-./downloads}:/downloads
-      - ${MEDIA_PATH:-./media}/tv:/tv
+      - "/media/devmon/Seagate Backup Plus/Media/Downloads:/downloads"
+      - "/media/devmon/Seagate Backup Plus/Media/tv:/tv"
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -183,8 +183,8 @@ services:
       - "${LIDARR_PORT:-8686}:8686"
     volumes:
       - lidarr_config:/config
-      - ${DOWNLOADS_PATH:-./downloads}:/downloads
-      - ${MEDIA_PATH:-./media}/music:/music
+      - "/media/devmon/Seagate Backup Plus/Media/Downloads:/downloads"
+      - "/media/devmon/Seagate Backup Plus/Media/music:/music"
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -202,8 +202,8 @@ services:
       - "${BAZARR_PORT:-6767}:6767"
     volumes:
       - bazarr_config:/config
-      - ${MEDIA_PATH:-./media}/movies:/movies
-      - ${MEDIA_PATH:-./media}/tv:/tv
+      - "/media/devmon/Seagate Backup Plus/Media/movies:/movies"
+      - "/media/devmon/Seagate Backup Plus/Media/tv:/tv"
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -221,10 +221,9 @@ services:
       - "${JELLYFIN_PORT:-8096}:8096"
     volumes:
       - jellyfin_config:/config
-      - ${MEDIA_PATH:-./media}/movies:/data/movies
-      - ${MEDIA_PATH:-./media}/tv:/data/tv
-      - ${MEDIA_PATH:-./media}/music:/data/music
-      - ${MEDIA_PATH:-./media}/books:/data/books
+      - "/media/devmon/Seagate Backup Plus/Media/movies:/data/movies"
+      - "/media/devmon/Seagate Backup Plus/Media/tv:/data/tv"
+      - "/media/devmon/Seagate Backup Plus/Media/music:/data/music"
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
