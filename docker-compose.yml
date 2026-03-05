@@ -192,7 +192,7 @@ services:
   #  Web UI: http://<host-ip>:8787
   # ─────────────────────────────────────────────────────────────────────────
   readarr:
-    image: lscr.io/linuxserver/readarr:nightly
+    image: lscr.io/linuxserver/readarr:latest
     container_name: readarr
     environment:
       - PUID=${PUID:-1000}
