@@ -1,15 +1,22 @@
 ###############################################################################
-#  ARR Media Stack — Gluetun VPN (PIA/OpenVPN) + qBittorrent + Prowlarr
-#                     + Radarr + Jellyfin + Jellyseerr
+#  Full ARR Media Stack — Gluetun VPN (PIA/OpenVPN)
 #
-#  All torrent & indexer traffic is forced through the Gluetun VPN tunnel.
-#  Web UIs are exposed on the host via Gluetun so they stay reachable
-#  on your local network.
+#  Services:
+#    VPN:       Gluetun (PIA + OpenVPN, kill-switch, DNS leak prevention)
+#    Torrent:   qBittorrent (behind VPN)
+#    Indexers:  Prowlarr + FlareSolverr (behind VPN)
+#    Movies:    Radarr
+#    TV Shows:  Sonarr
+#    Music:     Lidarr
+#    Books:     Readarr
+#    Subtitles: Bazarr
+#    Media:     Jellyfin
+#    Requests:  Jellyseerr
 #
 #  Usage:
 #    1. Copy .env.example → .env  and fill in your PIA credentials
 #    2. docker compose up -d
-#    3. Verify VPN:  docker exec gluetun curl -s https://ipinfo.io
+#    3. Verify VPN:  docker exec gluetun wget -qO- https://ipinfo.io
 #
 #  CasaOS compatible — import this file directly.
 ###############################################################################
@@ -50,10 +57,11 @@ services:
       - HEALTH_TARGET_ADDRESS=1.1.1.1:443
 
     ports:
-      # Gluetun owns the network for qBittorrent & Prowlarr,
+      # Gluetun owns the network for VPN-routed containers,
       # so their web UI ports must be exposed here:
       - "${QBIT_WEBUI_PORT:-8080}:8080"       # qBittorrent Web UI
       - "${PROWLARR_PORT:-9696}:9696"          # Prowlarr Web UI
+      - "${FLARESOLVERR_PORT:-8191}:8191"      # FlareSolverr
       - "${QBIT_PORT:-6881}:6881"              # qBittorrent torrent port
       - "${QBIT_PORT:-6881}:6881/udp"          # qBittorrent torrent port (UDP)
     volumes:
@@ -107,9 +115,26 @@ services:
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
+  #  FLARESOLVERR — Cloudflare bypass proxy for Prowlarr indexers
+  #  Used by Prowlarr to access Cloudflare-protected indexer sites
+  #  Access: http://localhost:8191 (from inside Gluetun network)
+  # ─────────────────────────────────────────────────────────────────────────
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    network_mode: "service:gluetun"     # ← Behind VPN with Prowlarr
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - LOG_LEVEL=info
+      - LOG_HTML=false
+      - TZ=${TZ:-Etc/UTC}
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
   #  RADARR — Movie management
   #  Web UI: http://<host-ip>:7878
-  #  NOT behind VPN — only talks to Prowlarr & qBittorrent internally
   # ─────────────────────────────────────────────────────────────────────────
   radarr:
     image: lscr.io/linuxserver/radarr:latest
@@ -124,6 +149,82 @@ services:
       - radarr_config:/config
       - ${DOWNLOADS_PATH:-./downloads}:/downloads
       - ${MEDIA_PATH:-./media}/movies:/movies
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  SONARR — TV show management
+  #  Web UI: http://<host-ip>:8989
+  # ─────────────────────────────────────────────────────────────────────────
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    ports:
+      - "${SONARR_PORT:-8989}:8989"
+    volumes:
+      - sonarr_config:/config
+      - ${DOWNLOADS_PATH:-./downloads}:/downloads
+      - ${MEDIA_PATH:-./media}/tv:/tv
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  LIDARR — Music management
+  #  Web UI: http://<host-ip>:8686
+  # ─────────────────────────────────────────────────────────────────────────
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    ports:
+      - "${LIDARR_PORT:-8686}:8686"
+    volumes:
+      - lidarr_config:/config
+      - ${DOWNLOADS_PATH:-./downloads}:/downloads
+      - ${MEDIA_PATH:-./media}/music:/music
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  READARR — Book & audiobook management
+  #  Web UI: http://<host-ip>:8787
+  # ─────────────────────────────────────────────────────────────────────────
+  readarr:
+    image: lscr.io/linuxserver/readarr:develop
+    container_name: readarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    ports:
+      - "${READARR_PORT:-8787}:8787"
+    volumes:
+      - readarr_config:/config
+      - ${DOWNLOADS_PATH:-./downloads}:/downloads
+      - ${MEDIA_PATH:-./media}/books:/books
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────────────────────────────────
+  #  BAZARR — Subtitle management (auto-downloads subs for Radarr & Sonarr)
+  #  Web UI: http://<host-ip>:6767
+  # ─────────────────────────────────────────────────────────────────────────
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    ports:
+      - "${BAZARR_PORT:-6767}:6767"
+    volumes:
+      - bazarr_config:/config
+      - ${MEDIA_PATH:-./media}/movies:/movies
+      - ${MEDIA_PATH:-./media}/tv:/tv
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -144,6 +245,7 @@ services:
       - ${MEDIA_PATH:-./media}/movies:/data/movies
       - ${MEDIA_PATH:-./media}/tv:/data/tv
       - ${MEDIA_PATH:-./media}/music:/data/music
+      - ${MEDIA_PATH:-./media}/books:/data/books
     restart: unless-stopped
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -169,5 +271,9 @@ volumes:
   qbittorrent_config:
   prowlarr_config:
   radarr_config:
+  sonarr_config:
+  lidarr_config:
+  readarr_config:
+  bazarr_config:
   jellyfin_config:
   jellyseerr_config:
