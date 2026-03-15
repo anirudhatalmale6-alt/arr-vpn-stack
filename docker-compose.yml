@@ -1,8 +1,8 @@
 ###############################################################################
-#  Full ARR Media Stack — Gluetun VPN (PIA/WireGuard)
+#  Full ARR Media Stack — Gluetun VPN (PIA/OpenVPN)
 #
 #  Services:
-#    VPN:       Gluetun (PIA + WireGuard, kill-switch, DNS leak prevention)
+#    VPN:       Gluetun (PIA + OpenVPN, kill-switch, DNS leak prevention)
 #    Torrent:   qBittorrent (behind VPN)
 #    Indexers:  Prowlarr + FlareSolverr (behind VPN)
 #    Movies:    Radarr
@@ -24,7 +24,7 @@
 services:
 
   # ─────────────────────────────────────────────────────────────────────────
-  #  GLUETUN — VPN gateway container (PIA + WireGuard)
+  #  GLUETUN — VPN gateway container (PIA + OpenVPN)
   #  All containers using network_mode: "service:gluetun" will inherit
   #  this VPN tunnel. Kill-switch is enabled by default.
   # ─────────────────────────────────────────────────────────────────────────
@@ -34,11 +34,11 @@ services:
     cap_add:
       - NET_ADMIN                       # Required for VPN tunnel creation
     devices:
-      - /dev/net/tun:/dev/net/tun       # TUN device for VPN
+      - /dev/net/tun:/dev/net/tun       # TUN device for OpenVPN
     environment:
       # ── VPN Provider Settings ──
       - VPN_SERVICE_PROVIDER=private internet access
-      - VPN_TYPE=wireguard
+      - VPN_TYPE=openvpn
       - OPENVPN_USER=${PIA_USER}
       - OPENVPN_PASSWORD=${PIA_PASS}
       - SERVER_REGIONS=${PIA_REGION:-Netherlands}
@@ -49,14 +49,13 @@ services:
 
       # ── Kill Switch & DNS Leak Prevention ──
       - FIREWALL_VPN_INPUT_PORTS=${QBIT_PORT:-6881}   # Port for torrent traffic
-      - DOT=on                          # DNS-over-TLS (prevents DNS leaks)
-      - DOT_PROVIDERS=cloudflare        # Use Cloudflare DoT
+      - DNS_SERVER=on                   # DNS-over-TLS (prevents DNS leaks)
+      - DNS_UPSTREAM_RESOLVERS=cloudflare
       - BLOCK_MALICIOUS=on              # Block malicious domains
       - FIREWALL=on                     # Built-in kill-switch (default)
 
       # ── Health Check ──
-      - HEALTH_VPN_DURATION_INITIAL=30s
-      - HEALTH_TARGET_ADDRESS=1.1.1.1:443
+      - HEALTH_TARGET_ADDRESSES=1.1.1.1:443
 
     ports:
       # Gluetun owns the network for VPN-routed containers,
