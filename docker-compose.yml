@@ -1,8 +1,8 @@
 ###############################################################################
-#  Full ARR Media Stack — Gluetun VPN (PIA/OpenVPN)
+#  Full ARR Media Stack — Gluetun VPN (PIA/WireGuard)
 #
 #  Services:
-#    VPN:       Gluetun (PIA + OpenVPN, kill-switch, DNS leak prevention)
+#    VPN:       Gluetun (PIA + WireGuard, kill-switch, DNS leak prevention)
 #    Torrent:   qBittorrent (behind VPN)
 #    Indexers:  Prowlarr + FlareSolverr (behind VPN)
 #    Movies:    Radarr
@@ -24,7 +24,7 @@
 services:
 
   # ─────────────────────────────────────────────────────────────────────────
-  #  GLUETUN — VPN gateway container (PIA + OpenVPN)
+  #  GLUETUN — VPN gateway container (PIA + WireGuard)
   #  All containers using network_mode: "service:gluetun" will inherit
   #  this VPN tunnel. Kill-switch is enabled by default.
   # ─────────────────────────────────────────────────────────────────────────
@@ -34,14 +34,18 @@ services:
     cap_add:
       - NET_ADMIN                       # Required for VPN tunnel creation
     devices:
-      - /dev/net/tun:/dev/net/tun       # TUN device for OpenVPN
+      - /dev/net/tun:/dev/net/tun       # TUN device for VPN
     environment:
       # ── VPN Provider Settings ──
       - VPN_SERVICE_PROVIDER=private internet access
-      - VPN_TYPE=openvpn
+      - VPN_TYPE=wireguard
       - OPENVPN_USER=${PIA_USER}
       - OPENVPN_PASSWORD=${PIA_PASS}
       - SERVER_REGIONS=${PIA_REGION:-Netherlands}
+
+      # ── Port Forwarding (required for torrent peers to connect) ──
+      - VPN_PORT_FORWARDING=on
+      - VPN_PORT_FORWARDING_PROVIDER=private internet access
 
       # ── Kill Switch & DNS Leak Prevention ──
       - FIREWALL_VPN_INPUT_PORTS=${QBIT_PORT:-6881}   # Port for torrent traffic
